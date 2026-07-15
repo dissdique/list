@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=600, height=600, initial-scale=1, user-scalable=no">
+<meta name="mrbd-web-app-capable" content="yes">
+<title>Lists</title>
+<style>
+  :root{
+    --bg:#000;
+    --fg:#f2f2f2;
+    --dim:#6b6b6b;
+    --accent:#ffb000; /* amber HUD accent */
+    --danger:#ff5a4e;
+  }
+  html,body{
+    margin:0; padding:0;
+    width:600px; height:600px;
+    background:var(--bg);
+    color:var(--fg);
+    overflow:hidden;
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{ width:600px; height:600px; position:relative; }
+  .screen{
+    position:absolute; top:0; left:0;
+    width:600px; height:600px;
+    display:none;
+    flex-direction:column;
+    box-sizing:border-box;
+    padding:28px 30px;
+  }
+  .screen.active{ display:flex; }
+
+  .header{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:14px;
+  }
+  .title{
+    font-size:32px;
+    font-weight:600;
+    letter-spacing:0.3px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:420px;
+  }
+  .count{ font-size:16px; color:var(--dim); }
+
+  .scroll{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    overflow:hidden;
+  }
+  .empty-hint{
+    color:var(--dim);
+    font-size:18px;
+    margin-top:40px;
+    line-height:1.5;
+  }
+
+  .row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    padding:11px 12px;
+    border-radius:10px;
+    font-size:22px;
+    border:2px solid transparent;
+  }
+  .row.focused{
+    border-color:var(--accent);
+    background:rgba(255,176,0,0.08);
+  }
+  .row.back{ color:var(--dim); font-size:19px; }
+  .row.back.focused{ color:var(--accent); }
+  .row.add{ color:var(--fg); }
+  .row.add.focused{ color:var(--accent); }
+
+  .box{
+    width:22px; height:22px; min-width:22px;
+    border-radius:5px;
+    border:2px solid var(--fg);
+    display:flex; align-items:center; justify-content:center;
+    font-size:15px;
+  }
+  .row.done .box{ border-color:var(--accent); background:var(--accent); color:#000; }
+  .row.done .item-text{ color:var(--dim); text-decoration: line-through; }
+  .item-text{ flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  .list-name{ flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .list-meta{ color:var(--dim); font-size:16px; }
+
+  .actions{ display:flex; gap:12px; margin-top:14px; }
+  .action-btn{
+    flex:1; text-align:center;
+    padding:14px 8px;
+    border-radius:12px;
+    font-size:18px; font-weight:600;
+    border:2px solid var(--dim);
+    color:var(--fg);
+    white-space:nowrap;
+  }
+  .action-btn.focused{
+    border-color:var(--accent); color:var(--accent);
+    background:rgba(255,176,0,0.08);
+  }
+
+  /* KEYPAD */
+  .kp-preview{
+    font-size:26px;
+    min-height:44px;
+    border-bottom:2px solid var(--dim);
+    padding-bottom:12px;
+    margin-bottom:20px;
+    word-break:break-word;
+  }
+  .kp-preview .cursor{
+    display:inline-block; width:2px; height:24px;
+    background:var(--accent); margin-left:2px; vertical-align:middle;
+  }
+  .kp-grid{ display:grid; grid-template-columns: repeat(7, 1fr); gap:8px; }
+  .kp-key{
+    aspect-ratio: 1;
+    display:flex; align-items:center; justify-content:center;
+    font-size:22px; border-radius:10px;
+    border:2px solid var(--dim); color:var(--fg);
+  }
+  .kp-key.focused{ border-color:var(--accent); color:var(--accent); background:rgba(255,176,0,0.08); }
+  .kp-bottom{ display:flex; gap:8px; margin-top:8px; }
+  .kp-bottom .kp-key{ flex:1; aspect-ratio:unset; font-size:20px; font-weight:600; height:56px; }
+
+  /* SHARE */
+  .share-text{
+    flex:1; font-size:19px; line-height:1.6;
+    white-space:pre-wrap; overflow:hidden;
+    border:2px solid var(--dim); border-radius:12px;
+    padding:16px; margin-bottom:16px;
+  }
+  .share-status{ text-align:center; color:var(--dim); font-size:16px; margin-top:6px; min-height:20px; }
+
+  .hint{ text-align:center; color:var(--dim); font-size:14px; margin-top:14px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- LISTS (top-level) SCREEN -->
+  <div class="screen active" id="screen-lists">
+    <div class="header">
+      <div class="title">Lists</div>
+      <div class="count" id="lists-count">0 lists</div>
+    </div>
+    <div class="scroll" id="lists-scroll"></div>
+    <div class="hint">↑↓ move · Enter select</div>
+  </div>
+
+  <!-- LIST DETAIL SCREEN -->
+  <div class="screen" id="screen-list">
+    <div class="header">
+      <div class="title" id="list-title">List</div>
+      <div class="count" id="list-count">0 items</div>
+    </div>
+    <div class="scroll" id="list-scroll"></div>
+    <div class="hint">↑↓ move · Enter select</div>
+  </div>
+
+  <!-- KEYPAD SCREEN -->
+  <div class="screen" id="screen-keypad">
+    <div class="kp-preview" id="kp-preview"><span class="cursor"></span></div>
+    <div class="kp-grid" id="kp-grid"></div>
+    <div class="kp-bottom">
+      <div class="kp-key" id="kp-cancel">Cancel</div>
+      <div class="kp-key" id="kp-done">Done</div>
+    </div>
+  </div>
+
+  <!-- SHARE SCREEN -->
+  <div class="screen" id="screen-share">
+    <div class="header">
+      <div class="title" id="share-title" style="font-size:28px;">Share list</div>
+    </div>
+    <div class="share-text" id="share-text"></div>
+    <div class="actions">
+      <div class="action-btn" id="btn-back">Back</div>
+      <div class="action-btn" id="btn-send">Text list</div>
+    </div>
+    <div class="share-status" id="share-status"></div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const STORAGE_KEY = 'mrbd-lists-v2';
+
+  /* ---------------- state ---------------- */
+  let lists = loadLists();
+  let currentListId = null;
+  let screen = 'lists'; // lists | list | keypad | share
+  let listsFocus = 0;   // 0..lists.length-1 = lists, lists.length = "+ New list"
+  let listFocus = 0;    // 0 = back row, 1..n = items, n+1 = add item, n+2 = share
+  let keypadMode = 'newlist'; // 'newlist' | 'additem'
+  let draft = '';
+  let kpRow = 0, kpCol = 0;
+  let shareFocus = 0;
+
+  function loadLists(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if(parsed && Array.isArray(parsed)) return parsed;
+    }catch(e){}
+    return [];
+  }
+  function saveLists(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(lists)); }catch(e){}
+  }
+  function currentList(){
+    return lists.find(l => l.id === currentListId);
+  }
+  function makeId(){ return 'l' + Date.now() + Math.floor(Math.random()*1000); }
+
+  /* ---------------- keypad layout ---------------- */
+  const KP_ROWS = [
+    ['A','B','C','D','E','F','G'],
+    ['H','I','J','K','L','M','N'],
+    ['O','P','Q','R','S','T','U'],
+    ['V','W','X','Y','Z','␣','⌫']
+  ];
+  function keyAt(r,c){ return KP_ROWS[r][c]; }
+
+  /* ---------------- screen switching ---------------- */
+  const screens = {
+    lists: document.getElementById('screen-lists'),
+    list: document.getElementById('screen-list'),
+    keypad: document.getElementById('screen-keypad'),
+    share: document.getElementById('screen-share')
+  };
+  function showScreen(name){
+    screen = name;
+    Object.keys(screens).forEach(k => screens[k].classList.toggle('active', k===name));
+    if(name==='lists') renderLists();
+    if(name==='list') renderListDetail();
+    if(name==='keypad') renderKeypad();
+    if(name==='share') renderShare();
+  }
+
+  function escapeHtml(s){
+    return (s||'').replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+
+  /* ---------------- LISTS screen ---------------- */
+  function renderLists(){
+    const scroll = document.getElementById('lists-scroll');
+    const countLabel = document.getElementById('lists-count');
+    scroll.innerHTML = '';
+
+    if(lists.length===0){
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'No lists yet.\nSelect "+ New list" and press Enter.';
+      scroll.appendChild(hint);
+    } else {
+      lists.forEach((l, i)=>{
+        const done = l.items.filter(it=>it.done).length;
+        const row = document.createElement('div');
+        row.className = 'row' + (listsFocus===i ? ' focused':'');
+        row.innerHTML = `<div class="list-name">${escapeHtml(l.name)}</div><div class="list-meta">${done}/${l.items.length}</div>`;
+        scroll.appendChild(row);
+      });
+    }
+
+    const addRow = document.createElement('div');
+    addRow.className = 'row add' + (listsFocus===lists.length ? ' focused':'');
+    addRow.textContent = '+ New list';
+    scroll.appendChild(addRow);
+
+    countLabel.textContent = lists.length ? `${lists.length} list${lists.length===1?'':'s'}` : '0 lists';
+  }
+
+  function handleListsInput(key){
+    const maxIndex = lists.length; // last valid index is "+ New list"
+    if(key==='ArrowUp'){
+      listsFocus = Math.max(0, listsFocus-1);
+      renderLists();
+    } else if(key==='ArrowDown'){
+      listsFocus = Math.min(maxIndex, listsFocus+1);
+      renderLists();
+    } else if(key==='Enter'){
+      if(listsFocus < lists.length){
+        currentListId = lists[listsFocus].id;
+        listFocus = 0;
+        showScreen('list');
+      } else {
+        keypadMode = 'newlist';
+        draft = '';
+        kpRow = 0; kpCol = 0;
+        showScreen('keypad');
+      }
+    }
+  }
+
+  /* ---------------- LIST DETAIL screen ---------------- */
+  function renderListDetail(){
+    const list = currentList();
+    if(!list){ showScreen('lists'); return; }
+
+    document.getElementById('list-title').textContent = list.name;
+    const doneCount = list.items.filter(i=>i.done).length;
+    document.getElementById('list-count').textContent = list.items.length ? `${doneCount}/${list.items.length} done` : '0 items';
+
+    const scroll = document.getElementById('list-scroll');
+    scroll.innerHTML = '';
+
+    const backRow = document.createElement('div');
+    backRow.className = 'row back' + (listFocus===0 ? ' focused':'');
+    backRow.textContent = '< Lists';
+    scroll.appendChild(backRow);
+
+    if(list.items.length===0){
+      const hint = document.createElement('div');
+      hint.className = 'empty-hint';
+      hint.textContent = 'No items yet.\nSelect "+ Add item" below.';
+      scroll.appendChild(hint);
+    } else {
+      list.items.forEach((item, i)=>{
+        const idx = i + 1;
+        const row = document.createElement('div');
+        row.className = 'row' + (item.done ? ' done':'') + (listFocus===idx ? ' focused':'');
+        row.innerHTML = `<div class="box">${item.done ? '✓' : ''}</div><div class="item-text">${escapeHtml(item.text)}</div>`;
+        scroll.appendChild(row);
+      });
+    }
+
+    const addIdx = list.items.length + 1;
+    const shareIdx = list.items.length + 2;
+    const addRow = document.createElement('div');
+    addRow.className = 'row add' + (listFocus===addIdx ? ' focused':'');
+    addRow.textContent = '+ Add item';
+    scroll.appendChild(addRow);
+
+    const shareRow = document.createElement('div');
+    shareRow.className = 'row add' + (listFocus===shareIdx ? ' focused':'');
+    shareRow.textContent = 'Share this list';
+    scroll.appendChild(shareRow);
+  }
+
+  function handleListDetailInput(key){
+    const list = currentList();
+    if(!list) return;
+    const maxIndex = list.items.length + 2;
+    if(key==='ArrowUp'){
+      listFocus = Math.max(0, listFocus-1);
+      renderListDetail();
+    } else if(key==='ArrowDown'){
+      listFocus = Math.min(maxIndex, listFocus+1);
+      renderListDetail();
+    } else if(key==='Enter'){
+      if(listFocus===0){
+        showScreen('lists');
+      } else if(listFocus <= list.items.length){
+        const item = list.items[listFocus-1];
+        item.done = !item.done;
+        saveLists();
+        renderListDetail();
+      } else if(listFocus === list.items.length+1){
+        keypadMode = 'additem';
+        draft = '';
+        kpRow = 0; kpCol = 0;
+        showScreen('keypad');
+      } else {
+        showScreen('share');
+      }
+    }
+  }
+
+  /* ---------------- KEYPAD screen ---------------- */
+  function renderKeypad(){
+    document.getElementById('kp-preview').innerHTML = escapeHtml(draft) + '<span class="cursor"></span>';
+    document.getElementById('kp-done').textContent = keypadMode==='newlist' ? 'Create list' : 'Add item';
+
+    const grid = document.getElementById('kp-grid');
+    grid.innerHTML = '';
+    KP_ROWS.forEach((row, r)=>{
+      row.forEach((key, c)=>{
+        const el = document.createElement('div');
+        el.className = 'kp-key' + (kpRow===r && kpCol===c ? ' focused':'');
+        el.textContent = key;
+        grid.appendChild(el);
+      });
+    });
+    document.getElementById('kp-cancel').classList.toggle('focused', kpRow===4 && kpCol===0);
+    document.getElementById('kp-done').classList.toggle('focused', kpRow===4 && kpCol===1);
+  }
+
+  function handleKeypadInput(key){
+    if(key==='ArrowUp'){
+      if(kpRow>0) kpRow--;
+      kpCol = Math.min(kpCol, KP_ROWS[Math.min(kpRow,3)].length-1);
+    } else if(key==='ArrowDown'){
+      if(kpRow<4) kpRow++;
+      if(kpRow<4) kpCol = Math.min(kpCol, KP_ROWS[kpRow].length-1);
+      else kpCol = Math.min(kpCol,1);
+    } else if(key==='ArrowLeft'){
+      if(kpRow<4){ kpCol = (kpCol - 1 + KP_ROWS[kpRow].length) % KP_ROWS[kpRow].length; }
+      else { kpCol = kpCol===0 ? 1 : 0; }
+    } else if(key==='ArrowRight'){
+      if(kpRow<4){ kpCol = (kpCol + 1) % KP_ROWS[kpRow].length; }
+      else { kpCol = kpCol===0 ? 1 : 0; }
+    } else if(key==='Enter'){
+      if(kpRow===4){
+        if(kpCol===0){ // cancel
+          showScreen(keypadMode==='newlist' ? 'lists' : 'list');
+        } else {
+          const text = draft.trim();
+          if(keypadMode==='newlist'){
+            if(text.length>0){
+              const newList = { id: makeId(), name: text, items: [] };
+              lists.push(newList);
+              saveLists();
+              currentListId = newList.id;
+              listFocus = 0;
+              showScreen('list');
+            } else {
+              showScreen('lists');
+            }
+          } else {
+            if(text.length>0){
+              const list = currentList();
+              if(list){ list.items.push({ text, done:false }); saveLists(); }
+            }
+            showScreen('list');
+          }
+        }
+        return;
+      }
+      const k = keyAt(kpRow,kpCol);
+      if(k==='⌫') draft = draft.slice(0,-1);
+      else if(k==='␣') draft += ' ';
+      else if(draft.length < 60) draft += k;
+    } else if(key==='Backspace'){
+      draft = draft.slice(0,-1);
+    }
+    renderKeypad();
+  }
+
+  /* ---------------- SHARE screen ---------------- */
+  function buildShareText(){
+    const list = currentList();
+    if(!list || list.items.length===0) return `${list ? list.name : 'This list'} is empty.`;
+    const lines = list.items.map(i => `${i.done ? '✓' : '-'} ${i.text}`);
+    return `${list.name}\n${lines.join('\n')}`;
+  }
+  function renderShare(){
+    const list = currentList();
+    document.getElementById('share-title').textContent = list ? `Share "${list.name}"` : 'Share list';
+    document.getElementById('share-text').textContent = buildShareText();
+    document.getElementById('share-status').textContent = '';
+    shareFocus = 0;
+    updateShareFocus();
+  }
+  function updateShareFocus(){
+    document.getElementById('btn-back').classList.toggle('focused', shareFocus===0);
+    document.getElementById('btn-send').classList.toggle('focused', shareFocus===1);
+  }
+  function handleShareInput(key){
+    if(key==='ArrowUp' || key==='ArrowLeft'){ shareFocus = 0; updateShareFocus(); }
+    else if(key==='ArrowDown' || key==='ArrowRight'){ shareFocus = 1; updateShareFocus(); }
+    else if(key==='Enter'){
+      if(shareFocus===0) showScreen('list');
+      else sendText();
+    }
+  }
+  function sendText(){
+    const status = document.getElementById('share-status');
+    const body = encodeURIComponent(buildShareText());
+    status.textContent = 'Opening Messages…';
+    try{ window.location.href = `sms:?body=${body}`; }
+    catch(e){ status.textContent = 'Could not open Messages on this device.'; }
+  }
+
+  /* ---------------- global input dispatch ---------------- */
+  window.addEventListener('keydown', (e)=>{
+    const key = e.key;
+    if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter'].includes(key)){
+      e.preventDefault();
+    }
+    if(screen==='lists') handleListsInput(key);
+    else if(screen==='list') handleListDetailInput(key);
+    else if(screen==='keypad') handleKeypadInput(key);
+    else if(screen==='share') handleShareInput(key);
+  });
+
+  /* click fallback support, harmless if unused */
+  document.getElementById('kp-cancel').addEventListener('click', ()=>{ kpRow=4; kpCol=0; handleKeypadInput('Enter'); });
+  document.getElementById('kp-done').addEventListener('click', ()=>{ kpRow=4; kpCol=1; handleKeypadInput('Enter'); });
+  document.getElementById('btn-back').addEventListener('click', ()=>{ shareFocus=0; handleShareInput('Enter'); });
+  document.getElementById('btn-send').addEventListener('click', ()=>{ shareFocus=1; handleShareInput('Enter'); });
+
+  renderLists();
+})();
+</script>
+</body>
+</html>
