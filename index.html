@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -55,8 +56,10 @@
     display:flex;
     flex-direction:column;
     gap:2px;
-    overflow:hidden;
+    overflow-y:auto;
+    scrollbar-width:none;
   }
+  .scroll::-webkit-scrollbar{ width:0; height:0; }
   .empty-hint{
     color:var(--dim);
     font-size:18px;
@@ -266,6 +269,11 @@
   }
   function currentList(){ return lists.find(l => l.id === currentListId); }
   function makeId(){ return 'l' + Date.now() + Math.floor(Math.random()*1000); }
+  function scrollFocusedIntoView(scrollEl){
+    const focused = scrollEl.querySelector('.focused');
+    if(focused) focused.scrollIntoView({ block: 'nearest' });
+  }
+
   function escapeHtml(s){
     return (s||'').replace(/[&<>"']/g, c => ({
       '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -409,6 +417,7 @@
     scroll.appendChild(pairRow);
 
     countLabel.textContent = lists.length ? `${lists.length} list${lists.length===1?'':'s'}` : '0 lists';
+    scrollFocusedIntoView(scroll);
   }
 
   function handleListsInput(key){
@@ -478,6 +487,8 @@
     shareRow.className = 'row add' + (listFocus===shareIdx ? ' focused':'');
     shareRow.textContent = 'Share this list';
     scroll.appendChild(shareRow);
+
+    scrollFocusedIntoView(scroll);
   }
 
   function handleListDetailInput(key){
